@@ -138,9 +138,8 @@ if __name__ == '__main__':
         smiles = load_smiles_from_txt(args['file'])
     else:
         df = pd.read_csv(args['file'])
-        # smiles = df[args['smiles_column']].tolist()
-        # 可以根据你的csv文件中"SMILES"所在列的名字来修改此处对应的"smiles"
-        smiles = df['smiles'].tolist()
+        smiles = df[args['smiles_column']].tolist()
+        
     print(len(smiles))
     # 文件命名格式以数据集文件名字命名
     name = args['file'].split('/')[-1].split('.')[0]
