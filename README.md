@@ -34,6 +34,26 @@ you can use your dataset follow the form as ours.
 
 you can define your KG dataset file name as "kg2id.txt" and DDI dataset name as "DDI_pos_neg.txt".
 
+## Pretrain your data Preparation
+
+##### 1. Graph-based drug embedding:
+
+you can use "pretrain_smiles_embedding.py" file to generate your drug embedding, which is at last shown at ".npy" form in the data/DRKG directory.
+
+try this code:
+
+> python pretrained_smiles_embedding.py -fi ./data/DRKG/your_smiles_file.csv -m gin_supervised_masking -fo csv -sc smiles
+
+-fi : your smiles file position
+
+-fo : your file's type: txt or csv
+
+-sc : the smiles "column name" in your smiles file. 
+
+when you run this code, you can then get the final Graph-based drug embedding.
+
+For convenient, the drug smiles order(in the "npy" file) is consistent with the KG entity, which means if you have 2322 drugs, and the grph-based embedding [ID：0-2321] is the same as the former 2322 KG entity [ID:0-2321]
+
 ## Environment Setting 
 
 This code is based on Pytorch 3.6.5. You need prepare your virtual enviroment early.
