@@ -124,7 +124,7 @@ if __name__ == '__main__':
                         help='Pre-trained model to use for computing molecule embeddings')
     parser.add_argument('-b', '--batch-size', type=int, default=256,
                         help='Batch size for embedding computation')
-    parser.add_argument('-o', '--out-dir', type=str, default='./data/DRKG/SARS_Embedding_Jure_300',
+    parser.add_argument('-o', '--out-dir', type=str, default='./data/DRKG',
                         help='Path to the computation results')
     args = parser.parse_args().__dict__
     mkdir_p(args['out_dir'])
