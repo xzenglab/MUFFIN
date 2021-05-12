@@ -52,7 +52,7 @@ try this code:
 
 when you run this code, you can then get the final Graph-based drug embedding.
 
-For convenient, the drug smiles order(in the "npy" file) is consistent with the KG entity, which means if you have 2322 drugs, and the grph-based embedding [ID：0-2321] is the same as the former 2322 KG entity [ID:0-2321]
+For convenient, the drug smiles order(in the "npy" file) is consistent with the KG entity, which means if you have 2322 drugs, and the grph-based embedding \[ID：0-2321\] is the same as the 2322 former KG entity \[ID:0-2321\]
 
 ## Environment Setting 
 
