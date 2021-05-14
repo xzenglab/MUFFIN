@@ -93,6 +93,7 @@ what you need to do according to your customized file:
 2. change “—entity_embedding_file” name with “your entity file position”
 3. change “—relation_embedding_file” name with “your relation file position”
 4. change “—out_dim” name with “1 or 81”, which is depends on your task “binary or multi-class”
+5. change “—multi_type” name with “False or True”, which is depends on your task “binary or multi-class”
 
 ## Contact
 
