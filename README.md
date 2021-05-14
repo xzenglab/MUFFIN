@@ -88,6 +88,12 @@ You can run the following command to re-implement our work:
 
 > python main.py
 
+what you need to do according to your customized file:
+1. change “—graph_embedding_file” name with “your smiles file position”
+2. change “—entity_embedding_file” name with “your entity file position”
+3. change “—relation_embedding_file” name with “your relation file position”
+4. change “—out_dim” name with “1 or 81”, which is depends on your task “binary or multi-class”
+
 ## Contact
 
 If you have any question, just contact us.  
