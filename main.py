@@ -98,13 +98,13 @@ def parse_SKGDDI_args():
     parser.add_argument('--evaluate_every', type=int, default=1,
                         help='Epoch interval of evaluating DDI.')
 
-    parser.add_argument('--multi_type', nargs='?', default='True',
+    parser.add_argument('--multi_type', nargs='?', default='False',
                         help='whether task is multi-class')
     parser.add_argument('--n_hidden_1', type=int, default=2048,
                         help='FC hidden 1 dim')
     parser.add_argument('--n_hidden_2', type=int, default=2048,
                         help='FC hidden 2 dim')
-    parser.add_argument('--out_dim', type=int, default=81,
+    parser.add_argument('--out_dim', type=int, default=1,
                         help='FC output dim: 81 or 1')
     parser.add_argument('--structure_dim', type=int, default=300,
                         help='structure_dim')
