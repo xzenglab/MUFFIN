@@ -46,11 +46,15 @@ def parse_SKGDDI_args():
                         help='Choose a dataset from {DrugBank, DRKG}')
     parser.add_argument('--data_dir', nargs='?', default='data/',
                         help='Input data path.')
+    parser.add_argument('--graph_embedding_file', nargs='?', default='data/DRKG/gin_supervised_masking_embedding.npy',
+                        help='Input data path.')
+    parser.add_argument('--entity_embedding_file', nargs='?', default='data/DRKG/DRKG_TransE_l2_entity.npy',
+                        help='Input data path.')
+    parser.add_argument('--relation_embedding_file', nargs='?', default='data/DRKG/DRKG_TransE_l2_relation.npy',
+                        help='Input data path.')
 
     parser.add_argument('--use_pretrain', type=int, default=1,
                         help='0: No pretrain, 1: Pretrain with the learned embeddings')
-    parser.add_argument('--pretrain_embedding_dir', nargs='?', default='embedding_data/',
-                        help='Path of learned embeddings.')
     parser.add_argument('--pretrain_model_path', nargs='?', default='trained_model/model.pth',
                         help='Path of stored model.')
 
@@ -94,36 +98,20 @@ def parse_SKGDDI_args():
     parser.add_argument('--evaluate_every', type=int, default=1,
                         help='Epoch interval of evaluating DDI.')
 
-    parser.add_argument('--multi_type', nargs='?', default='False',
+    parser.add_argument('--multi_type', nargs='?', default='True',
                         help='whether task is multi-class')
-    parser.add_argument('--attention_type', nargs='?', default='concat',
-                        help='sum or concat')
     parser.add_argument('--n_hidden_1', type=int, default=2048,
                         help='FC hidden 1 dim')
     parser.add_argument('--n_hidden_2', type=int, default=2048,
                         help='FC hidden 2 dim')
-    parser.add_argument('--out_dim', type=int, default=1,
-                        help='FC output dim: 86 or 1')
+    parser.add_argument('--out_dim', type=int, default=81,
+                        help='FC output dim: 81 or 1')
     parser.add_argument('--structure_dim', type=int, default=300,
                         help='structure_dim')
     parser.add_argument('--pre_entity_dim', type=int, default=400,
                         help='pre_entity_dim')
     parser.add_argument('--feature_fusion', nargs='?', default='init_double',
-                        help='feature fusion type: concat / sum / none / cross/ double')
-
-    parser.add_argument("--graph_split_size", type=float, default=0.5,
-                        help="portion of edges used as positive sample")
-    parser.add_argument("--negative_sample", type=int, default=10,
-                        help="number of negative samples per positive sample")
-    parser.add_argument("--edge_sampler", type=str, default="neighbor",
-                        help="type of edge sampler: 'uniform' or 'neighbor'")
-    parser.add_argument("--graph_batch_size", type=int, default=40000)
-
-    # parser.add_argument('--negative_sample_size', default=256, type=int)
-    parser.add_argument('--max_steps', default=128000, type=int)
-    parser.add_argument('-adv', '--negative_adversarial_sampling', action='store_true')
-    parser.add_argument('--uni_weight', action='store_true',
-                        help='Otherwise use subsampling weighting like in word2vec')
+                        help='feature fusion type: concat / sum / init_double')
 
     args = parser.parse_args()
 
@@ -174,56 +162,6 @@ def logging_config(folder=None, name=None,
     return folder
 
 
-def to_categorical(y, num_classes=None, dtype='float32'):
-    """Converts a class vector (integers) to binary class matrix.
-    E.g. for use with categorical_crossentropy.
-    # Arguments
-        y: class vector to be converted into a matrix
-            (integers from 0 to num_classes).
-        num_classes: total number of classes.
-        dtype: The data type expected by the input, as a string
-            (`float32`, `float64`, `int32`...)
-    # Returns
-        A binary matrix representation of the input. The classes axis
-        is placed last.
-    # Example
-    ```python
-    # Consider an array of 5 labels out of a set of 3 classes {0, 1, 2}:
-    > labels
-    array([0, 2, 1, 2, 0])
-    # `to_categorical` converts this into a matrix with as many
-    # columns as there are classes. The number of rows
-    # stays the same.
-    > to_categorical(labels)
-    array([[ 1.,  0.,  0.],
-           [ 0.,  0.,  1.],
-           [ 0.,  1.,  0.],
-           [ 0.,  0.,  1.],
-           [ 1.,  0.,  0.]], dtype=float32)
-    ```
-    """
-    # 将输入y向量转换为数组
-    y = np.array(y, dtype='int')
-    # 获取数组的行列大小
-    input_shape = y.shape
-    if input_shape and input_shape[-1] == 1 and len(input_shape) > 1:
-        input_shape = tuple(input_shape[:-1])
-    # y变为1维数组
-    y = y.ravel()
-    # 如果用户没有输入分类个数，则自行计算分类个数
-    if not num_classes:
-        num_classes = np.max(y) + 1
-    n = y.shape[0]
-    # 生成全为0的n行num_classes列的值全为0的矩阵
-    categorical = np.zeros((n, num_classes), dtype=dtype)
-    # np.arange(n)得到每个行的位置值，y里边则是每个列的位置值
-    categorical[np.arange(n), y] = 1
-    # 进行reshape矫正
-    output_shape = input_shape + (num_classes,)
-    categorical = np.reshape(categorical, output_shape)
-    return categorical
-
-
 # -----------------------------------------loading KG data and DDI 5-fold data------------------------------------------
 
 # loading data
@@ -233,17 +171,19 @@ class DataLoaderSKGDDI(object):
         self.args = args
         self.data_name = args.data_name
         self.use_pretrain = args.use_pretrain
-        self.pretrain_embedding_dir = args.pretrain_embedding_dir
 
         self.ddi_batch_size = args.DDI_batch_size
         self.kg_batch_size = args.kg_batch_size
 
-        self.multi = multi_type
+        self.multi_type = args.multi_type
 
         self.entity_dim = args.entity_dim
 
         data_dir = os.path.join(args.data_dir, args.data_name)
-        train_file = os.path.join(data_dir, 'DDI_pos_neg.txt')
+        if self.multi_type == 'True':
+            train_file = os.path.join(data_dir, 'multi_ddi_sift.txt')
+        else:
+            train_file = os.path.join(data_dir, 'DDI_pos_neg.txt')
         if args.data_name == 'DRKG':
             kg_file = os.path.join(data_dir, "train.tsv")
         else:
@@ -380,31 +320,36 @@ class DataLoaderSKGDDI(object):
             masking_entity_data = np.load(masking_entity_path)
 
         else:
+            # change name by yourself.
 
-            if self.entity_dim == 300:
-                transE_entity_path = 'data/DRKG/TransE_l2_DRKG_0/DRKG_TransE_l2_entity_300.npy'
-                transE_relation_path = 'data/DRKG/TransE_l2_DRKG_0/DRKG_TransE_l2_relation_300.npy'
-            elif self.entity_dim == 256:
-                transE_entity_path = 'ckpts/TransE_l2_DRKG_19/DRKG_TransE_l2_entity.npy'
-                transE_relation_path = 'ckpts/TransE_l2_DRKG_19/DRKG_TransE_l2_relation.npy'
-            elif self.entity_dim == 100:
-                # 128 negative sample
-                transE_entity_path = 'data/DRKG/DRKG_TransE_l2_entity.npy'
-                transE_relation_path = 'data/DRKG/DRKG_TransE_l2_relation.npy'
-            elif self.entity_dim == 128:
-                transE_entity_path = 'data/DRKG/DRKG_TransE_l2_entity_128.npy'
-                transE_relation_path = 'data/DRKG/DRKG_TransE_l2_relation_128.npy'
-            elif self.entity_dim == 32:
-                transE_entity_path = 'data/DRKG/32/TransE_l2_DRKG_0/DRKG_TransE_l2_entity.npy'
-                transE_relation_path = 'data/DRKG/32/TransE_l2_DRKG_0/DRKG_TransE_l2_relation.npy'
-            elif self.entity_dim == 64:
-                transE_entity_path = 'data/DRKG/64/TransE_l2_DRKG_0/DRKG_TransE_l2_entity.npy'
-                transE_relation_path = 'data/DRKG/64/TransE_l2_DRKG_0/DRKG_TransE_l2_relation.npy'
+            # if self.entity_dim == 300:
+            #     transE_entity_path = 'data/DRKG/TransE_l2_DRKG_0/DRKG_TransE_l2_entity_300.npy'
+            #     transE_relation_path = 'data/DRKG/TransE_l2_DRKG_0/DRKG_TransE_l2_relation_300.npy'
+            # elif self.entity_dim == 256:
+            #     transE_entity_path = 'ckpts/TransE_l2_DRKG_19/DRKG_TransE_l2_entity.npy'
+            #     transE_relation_path = 'ckpts/TransE_l2_DRKG_19/DRKG_TransE_l2_relation.npy'
+            # elif self.entity_dim == 100:
+            #     # 128 negative sample
+            #     transE_entity_path = 'data/DRKG/DRKG_TransE_l2_entity.npy'
+            #     transE_relation_path = 'data/DRKG/DRKG_TransE_l2_relation.npy'
+            # elif self.entity_dim == 128:
+            #     transE_entity_path = 'data/DRKG/DRKG_TransE_l2_entity_128.npy'
+            #     transE_relation_path = 'data/DRKG/DRKG_TransE_l2_relation_128.npy'
+            # elif self.entity_dim == 32:
+            #     transE_entity_path = 'data/DRKG/32/TransE_l2_DRKG_0/DRKG_TransE_l2_entity.npy'
+            #     transE_relation_path = 'data/DRKG/32/TransE_l2_DRKG_0/DRKG_TransE_l2_relation.npy'
+            # elif self.entity_dim == 64:
+            #     transE_entity_path = 'data/DRKG/64/TransE_l2_DRKG_0/DRKG_TransE_l2_entity.npy'
+            #     transE_relation_path = 'data/DRKG/64/TransE_l2_DRKG_0/DRKG_TransE_l2_relation.npy'
+
+            transE_entity_path = self.args.entity_embedding_file
+            transE_relation_path = self.args.relation_embedding_file
 
             transE_entity_data = np.load(transE_entity_path)
             transE_relation_data = np.load(transE_relation_path)
 
-            masking_entity_path = 'data/DRKG/gin_supervised_masking_embedding.npy'
+            # masking_entity_path = 'data/DRKG/gin_supervised_masking_embedding.npy'
+            masking_entity_path = self.args.graph_embedding_file
             masking_entity_data = np.load(masking_entity_path)
 
         # apply pretrained data
@@ -446,19 +391,24 @@ def save_model(all_embed, model, model_dir, current_epoch, last_best_epoch=None)
     model_state_file = os.path.join(model_dir, 'model_epoch{}.pth'.format(current_epoch))
     torch.save({'model_state_dict': model.state_dict(), 'epoch': current_epoch}, model_state_file)
 
-    file_name = os.path.join(model_dir, 'drug_embed{}.npy'.format(current_epoch))
-    np.save(file_name, all_embed.cpu().detach().numpy())
-
-    data = np.load(file_name)
-    print(data.shape)
+    # file_name = os.path.join(model_dir, 'drug_embed{}.npy'.format(current_epoch))
+    # np.save(file_name, all_embed.cpu().detach().numpy())
+    #
+    # data = np.load(file_name)
+    # print(data.shape)
+    #
+    # if last_best_epoch is not None and current_epoch != last_best_epoch:
+    #     old_model_state_file = os.path.join(model_dir, 'model_epoch{}.pth'.format(last_best_epoch))
+    #     old_embedding_file = os.path.join(model_dir, 'drug_embed{}.npy'.format(last_best_epoch))
+    #     if os.path.exists(old_model_state_file):
+    #         os.system('rm {}'.format(old_model_state_file))
+    #     if os.path.exists(old_embedding_file):
+    #         os.system('rm {}'.format(old_embedding_file))
 
     if last_best_epoch is not None and current_epoch != last_best_epoch:
         old_model_state_file = os.path.join(model_dir, 'model_epoch{}.pth'.format(last_best_epoch))
-        old_embedding_file = os.path.join(model_dir, 'drug_embed{}.npy'.format(last_best_epoch))
         if os.path.exists(old_model_state_file):
             os.system('rm {}'.format(old_model_state_file))
-        if os.path.exists(old_embedding_file):
-            os.system('rm {}'.format(old_embedding_file))
 
 
 def load_model(model, model_path):
@@ -504,8 +454,6 @@ class GCNModel(nn.Module):
         self.structure_dim = args.structure_dim
         self.pre_entity_dim = args.pre_entity_dim
 
-        self.aggregation_type = args.aggregation_type
-        self.attention_type = args.attention_type
         self.fusion_type = args.feature_fusion
         self.multi_type = args.multi_type
 
@@ -513,7 +461,6 @@ class GCNModel(nn.Module):
         self.mess_dropout = eval(args.mess_dropout)
         self.n_layers = len(eval(args.conv_dim_list))
 
-        self.kg_l2loss_lambda = args.kg_l2loss_lambda
         self.ddi_l2loss_lambda = args.DDI_l2loss_lambda
 
         self.hidden_dim = args.entity_dim
@@ -718,6 +665,7 @@ class GCNModel(nn.Module):
         x = self.layer1(drug_data)
         x = self.layer2(x)
         x = self.layer3(x)
+
         if self.multi_type != 'False':
             pred = F.softmax(x, dim=1)
         else:
@@ -725,14 +673,11 @@ class GCNModel(nn.Module):
         return pred, all_embed
 
     def forward(self, mode, *input):
-        if mode == 'calc_att':
-            return self.compute_attention(*input)
+
         if mode == 'calc_ddi_loss':
             return self.train_DDI_data(mode, *input)
         if mode == 'predict':
             return self.test_DDI_data(mode, *input)
-        if mode == 'calc_kg_loss':
-            return self.kg_train(*input)
         if mode == 'feature_fusion':
             return self.generate_fusion_feature(*input)
 
@@ -740,19 +685,26 @@ class GCNModel(nn.Module):
 # -------------------------------------- metrics and evaluation define -------------------------------------------------
 
 def calc_metrics(y_true, y_pred, pred_score, multi_type):
-    acc = accuracy_score(y_true, y_pred)
-    precision = precision_score(y_true, y_pred)
-    recall = recall_score(y_true, y_pred)
-    f1 = f1_score(y_true, y_pred)
-    # auc = roc_auc_score(y_one_hot, pred_score, average='micro')
     if multi_type != 'False':
-        y_one_hot = to_categorical(y_true, num_classes=86)
-        auc = roc_auc_score(y_one_hot, pred_score, average='micro')
-    else:
-        auc = roc_auc_score(y_true.cuda().data.cpu().numpy(), pred_score.cuda().data.cpu().numpy())
-    print(acc, precision, recall, f1, auc)
 
-    return acc, precision, recall, f1, auc
+        acc = accuracy_score(y_true, y_pred)
+        macro_precision = precision_score(y_true, y_pred, average='macro')
+        macro_recall = recall_score(y_true, y_pred, average='macro')
+        macro_f1 = f1_score(y_true, y_pred, average='macro')
+        micro_precision = precision_score(y_true, y_pred, average='micro')
+        micro_recall = recall_score(y_true, y_pred, average='micro')
+        micro_f1 = f1_score(y_true, y_pred, average='micro')
+        return acc, macro_precision, macro_recall, macro_f1, micro_precision, micro_recall, micro_f1
+    else:
+        acc = accuracy_score(y_true, y_pred)
+        precision = precision_score(y_true, y_pred)
+        recall = recall_score(y_true, y_pred)
+        f1 = f1_score(y_true, y_pred)
+        auc = roc_auc_score(y_true.cuda().data.cpu().numpy(), pred_score.cuda().data.cpu().numpy())
+
+        print(acc, precision, recall, f1, auc)
+
+        return acc, precision, recall, f1, auc
 
 
 def evaluate(args, model, train_graph, loader_test, embedding_pre, embedding_after, loader_idx, epoch):
@@ -764,6 +716,13 @@ def evaluate(args, model, train_graph, loader_test, embedding_pre, embedding_aft
     acc_list = []
     auc_list = []
 
+    macro_precision_list = []
+    macro_recall_list = []
+    macro_f1_list = []
+    micro_precision_list = []
+    micro_recall_list = []
+    micro_f1_list = []
+
     with torch.no_grad():
         for data in loader_test:
             test_x, test_y = data
@@ -774,25 +733,50 @@ def evaluate(args, model, train_graph, loader_test, embedding_pre, embedding_aft
                 prediction = copy.deepcopy(out)
                 prediction[prediction >= 0.5] = 1
                 prediction[prediction < 0.5] = 0
+                prediction = prediction.cuda().data.cpu().numpy()
+                acc, precision, recall, f1, auc = calc_metrics(test_y, prediction, out, args.multi_type)
+                acc_list.append(acc)
+                precision_list.append(precision)
+                recall_list.append(recall)
+                f1_list.append(f1)
+                auc_list.append(auc)
 
             else:
                 prediction = torch.max(out, 1)[1]
-            prediction = prediction.cuda().data.cpu().numpy()
-            acc, precision, recall, f1, auc = calc_metrics(test_y, prediction, out, args.multi_type)
+                prediction = prediction.cuda().data.cpu().numpy()
+                acc, macro_precision, macro_recall, macro_f1, micro_precision, micro_recall, micro_f1 = calc_metrics(
+                    test_y,
+                    prediction,
+                    out,
+                    args.multi_type)
+                acc_list.append(acc)
+                macro_precision_list.append(macro_precision)
+                macro_recall_list.append(macro_recall)
+                macro_f1_list.append(macro_f1)
+                micro_precision_list.append(micro_precision)
+                micro_recall_list.append(micro_recall)
+                micro_f1_list.append(micro_f1)
 
-            acc_list.append(acc)
-            precision_list.append(precision)
-            recall_list.append(recall)
-            f1_list.append(f1)
-            auc_list.append(auc)
+    if args.multi_type == 'False':
+        precision = np.mean(precision_list)
+        recall = np.mean(recall_list)
+        f1 = np.mean(f1_list)
+        acc = np.mean(acc_list)
+        auc = np.mean(auc_list)
 
-    precision = np.mean(precision_list)
-    recall = np.mean(recall_list)
-    f1 = np.mean(f1_list)
-    acc = np.mean(acc_list)
-    auc = np.mean(auc_list)
+        return precision, recall, f1, acc, auc, all_embedding
+    else:
+        macro_precision = np.mean(macro_precision_list)
+        macro_recall = np.mean(macro_recall_list)
+        macro_f1 = np.mean(macro_f1_list)
+        micro_precision = np.mean(micro_precision_list)
+        micro_recall = np.mean(micro_recall_list)
+        micro_f1 = np.mean(micro_f1_list)
+        acc = np.mean(acc_list)
 
-    return precision, recall, f1, acc, auc, all_embedding
+        # print(acc, macro_precision, macro_recall, macro_f1, micro_precision, micro_recall, micro_f1)
+
+        return macro_precision, macro_recall, macro_f1, micro_precision, micro_recall, micro_f1, acc, all_embedding
 
 
 # -----------------------------------   train model  -------------------------------------------------------------------
@@ -839,7 +823,6 @@ def train(args):
     else:
         entity_pre_embed, relation_pre_embed, structure_pre_embed = None, None, None
 
-
     train_graph = None
 
     all_acc_list = []
@@ -847,6 +830,13 @@ def train(args):
     all_recall_list = []
     all_f1_list = []
     all_auc_list = []
+
+    all_macro_precision_list = []
+    all_macro_recall_list = []
+    all_macro_f1_list = []
+    all_micro_precision_list = []
+    all_micro_recall_list = []
+    all_micro_f1_list = []
 
     # train model
     # use 5-fold cross validation
@@ -898,12 +888,23 @@ def train(args):
             shuffle=False
         )
         best_epoch = -1
+
         epoch_list = []
+
         acc_list = []
         precision_list = []
         recall_list = []
         f1_list = []
         auc_list = []
+
+        macro_precision_list = []
+        macro_recall_list = []
+        macro_f1_list = []
+
+        micro_precision_list = []
+        micro_recall_list = []
+        micro_f1_list = []
+
         init_step = 0
 
         for epoch in range(1, args.n_epoch + 1):
@@ -926,8 +927,9 @@ def train(args):
 
                 if args.multi_type == 'False':
                     out = out.squeeze(-1)
-
-                loss = loss_func(out, batch_y.float())
+                    loss = loss_func(out, batch_y.float())
+                else:
+                    loss = loss_func(out, batch_y.long())
 
                 loss.backward()
                 optimizer.step()
@@ -948,63 +950,158 @@ def train(args):
 
             logging.info('DDI + KG Training: Epoch {:04d} | Total Time {:.1f}s'.format(epoch, time() - time0))
 
-            # evaluate cf
-            if (epoch % args.evaluate_every) == 0:
-                time1 = time()
-                precision, recall, f1, acc, auc, all_embed = evaluate(args, model, train_graph, loader_test,
-                                                                      embedding_pre,
-                                                                      embedding_after, loader_idx, epoch)
-                logging.info(
-                    'DDI Evaluation: Epoch {:04d} | Total Time {:.1f}s | Precision {:.4f} Recall {:.4f} F1 {:.4f} ACC '
-                    '{:.4f} AUC {:.4f}'.format(
-                        epoch, time() - time1, precision, recall, f1, acc, auc))
+            if args.multi_type == 'False':
+                if (epoch % args.evaluate_every) == 0:
+                    time1 = time()
+                    precision, recall, f1, acc, auc, all_embed = evaluate(args, model, train_graph, loader_test,
+                                                                          embedding_pre,
+                                                                          embedding_after, loader_idx, epoch)
+                    logging.info(
+                        'DDI Evaluation: Epoch {:04d} | Total Time {:.1f}s | Precision {:.4f} Recall {:.4f} F1 {:.4f} ACC '
+                        '{:.4f} AUC {:.4f}'.format(
+                            epoch, time() - time1, precision, recall, f1, acc, auc))
 
-                epoch_list.append(epoch)
-                precision_list.append(precision)
-                recall_list.append(recall)
-                f1_list.append(f1)
-                acc_list.append(acc)
-                auc_list.append(auc)
-                best_auc, should_stop = early_stopping(auc_list, args.stopping_steps)
+                    epoch_list.append(epoch)
+                    precision_list.append(precision)
+                    recall_list.append(recall)
+                    f1_list.append(f1)
+                    acc_list.append(acc)
+                    auc_list.append(auc)
+                    best_auc, should_stop = early_stopping(auc_list, args.stopping_steps)
 
-                if should_stop:
-                    index = auc_list.index(best_auc)
-                    all_acc_list.append(acc_list[index])
-                    all_auc_list.append(auc_list[index])
-                    all_precision_list.append(precision_list[index])
-                    all_recall_list.append(recall_list[index])
-                    all_f1_list.append(f1_list[index])
-                    logging.info('Final DDI Evaluation: Precision {:.4f} Recall {:.4f} F1 {:.4f} ACC '
-                                 '{:.4f} AUC {:.4f}'.format(precision, recall, f1, acc, auc))
-                    break
+                    if should_stop:
+                        index = auc_list.index(best_auc)
+                        all_acc_list.append(acc_list[index])
+                        all_auc_list.append(auc_list[index])
+                        all_precision_list.append(precision_list[index])
+                        all_recall_list.append(recall_list[index])
+                        all_f1_list.append(f1_list[index])
+                        logging.info('Final DDI Evaluation: Precision {:.4f} Recall {:.4f} F1 {:.4f} ACC '
+                                     '{:.4f} AUC {:.4f}'.format(precision, recall, f1, acc, auc))
+                        break
 
-                if auc_list.index(best_auc) == len(auc_list) - 1:
-                    save_model(all_embed, model, args.save_dir, epoch, best_epoch)
-                    logging.info('Save model on epoch {:04d}!'.format(epoch))
-                    best_epoch = epoch
+                    if auc_list.index(best_auc) == len(auc_list) - 1:
+                        save_model(all_embed, model, args.save_dir, epoch, best_epoch)
+                        logging.info('Save model on epoch {:04d}!'.format(epoch))
+                        best_epoch = epoch
 
-                if epoch == args.n_epoch:
-                    index = auc_list.index(best_auc)
-                    all_acc_list.append(acc_list[index])
-                    all_auc_list.append(auc_list[index])
-                    all_precision_list.append(precision_list[index])
-                    all_recall_list.append(recall_list[index])
-                    all_f1_list.append(f1_list[index])
-                    logging.info('Final DDI Evaluation: Precision {:.4f} Recall {:.4f} F1 {:.4f} ACC '
-                                 '{:.4f} AUC {:.4f}'.format(precision, recall, f1, acc, auc))
+                    if epoch == args.n_epoch:
+                        index = auc_list.index(best_auc)
+                        all_acc_list.append(acc_list[index])
+                        all_auc_list.append(auc_list[index])
+                        all_precision_list.append(precision_list[index])
+                        all_recall_list.append(recall_list[index])
+                        all_f1_list.append(f1_list[index])
+                        logging.info('Final DDI Evaluation: Precision {:.4f} Recall {:.4f} F1 {:.4f} ACC '
+                                     '{:.4f} AUC {:.4f}'.format(precision, recall, f1, acc, auc))
+            else:
+                if (epoch % args.evaluate_every) == 0:
+                    time1 = time()
+                    macro_precision, macro_recall, macro_f1, micro_precision, micro_recall, micro_f1, acc, all_embed = evaluate(
+                        args,
+                        model,
+                        train_graph,
+                        loader_test,
+                        embedding_pre,
+                        embedding_after,
+                        loader_idx,
+                        epoch)
+                    logging.info(
+                        'DDI Evaluation: Epoch {:04d} | Total Time {:.1f}s | Macro Precision {:.4f} Macro Recall {:.4f} '
+                        'Macro F1 {:.4f} Micro Precision {:.4f} Micro Recall {:.4f} Micro F1 {:.4f} ACC {:.4f}'.format(
+                            epoch, time() - time1, macro_precision, macro_recall, macro_f1, micro_precision,
+                            micro_recall,
+                            micro_f1, acc))
 
-    print(all_acc_list)
-    print(all_precision_list)
-    print(all_recall_list)
-    print(all_f1_list)
-    print(all_auc_list)
-    mean_acc = np.mean(all_acc_list)
-    mean_precision = np.mean(all_precision_list)
-    mean_recall = np.mean(all_recall_list)
-    mean_f1 = np.mean(all_f1_list)
-    mean_auc = np.mean(all_auc_list)
-    logging.info('5-fold cross validation DDI Mean Evaluation: Precision {:.4f} Recall {:.4f} F1 {:.4f} ACC '
-                 '{:.4f} AUC {:.4f}'.format(mean_precision, mean_recall, mean_f1, mean_acc, mean_auc))
+                    epoch_list.append(epoch)
+
+                    macro_precision_list.append(macro_precision)
+                    macro_recall_list.append(macro_recall)
+                    macro_f1_list.append(macro_f1)
+
+                    micro_precision_list.append(micro_precision)
+                    micro_recall_list.append(micro_recall)
+                    micro_f1_list.append(micro_f1)
+
+                    acc_list.append(acc)
+                    # auc_list.append(auc)
+                    best_acc, should_stop = early_stopping(acc_list, args.stopping_steps)
+
+                    if should_stop:
+                        index = acc_list.index(best_acc)
+                        all_acc_list.append(acc_list[index])
+                        # all_auc_list.append(auc_list[index])
+
+                        all_macro_precision_list.append(macro_precision_list[index])
+                        all_macro_recall_list.append(macro_recall_list[index])
+                        all_macro_f1_list.append(macro_f1_list[index])
+
+                        all_micro_precision_list.append(micro_precision_list[index])
+                        all_micro_recall_list.append(micro_recall_list[index])
+                        all_micro_f1_list.append(micro_f1_list[index])
+
+                        logging.info('Final DDI Evaluation: Macro Precision {:.4f} Macro Recall {:.4f} '
+                                     'Macro F1 {:.4f} Micro Precision {:.4f} Micro Recall {:.4f} Micro F1 {:.4f} ACC {:.4f}'.format(
+                            macro_precision, macro_recall, macro_f1, micro_precision, micro_recall, micro_f1, acc))
+                        break
+
+                    if acc_list.index(best_acc) == len(acc_list) - 1:
+                        save_model(all_embed, model, args.save_dir, epoch, best_epoch)
+                        logging.info('Save model on epoch {:04d}!'.format(epoch))
+                        best_epoch = epoch
+
+                    if epoch == args.n_epoch:
+                        index = acc_list.index(best_acc)
+                        all_acc_list.append(acc_list[index])
+                        # all_auc_list.append(auc_list[index])
+
+                        all_macro_precision_list.append(macro_precision_list[index])
+                        all_macro_recall_list.append(macro_recall_list[index])
+                        all_macro_f1_list.append(macro_f1_list[index])
+
+                        all_micro_precision_list.append(micro_precision_list[index])
+                        all_micro_recall_list.append(micro_recall_list[index])
+                        all_micro_f1_list.append(micro_f1_list[index])
+
+                        logging.info('Final DDI Evaluation: Macro Precision {:.4f} Macro Recall {:.4f} '
+                                     'Macro F1 {:.4f} Micro Precision {:.4f} Micro Recall {:.4f} Micro F1 {:.4f} ACC {:.4f}'.format(
+                            macro_precision, macro_recall, macro_f1, micro_precision, micro_recall, micro_f1, acc))
+    if args.multi_type == 'False':
+
+        print(all_acc_list)
+        print(all_precision_list)
+        print(all_recall_list)
+        print(all_f1_list)
+        print(all_auc_list)
+        mean_acc = np.mean(all_acc_list)
+        mean_precision = np.mean(all_precision_list)
+        mean_recall = np.mean(all_recall_list)
+        mean_f1 = np.mean(all_f1_list)
+        mean_auc = np.mean(all_auc_list)
+        logging.info('5-fold cross validation DDI Mean Evaluation: Precision {:.4f} Recall {:.4f} F1 {:.4f} ACC '
+                     '{:.4f} AUC {:.4f}'.format(mean_precision, mean_recall, mean_f1, mean_acc, mean_auc))
+    else:
+
+        print(all_acc_list)
+        print(all_macro_precision_list)
+        print(all_macro_recall_list)
+        print(all_macro_f1_list)
+        print(all_micro_precision_list)
+        print(all_micro_recall_list)
+        print(all_micro_f1_list)
+
+        mean_acc = np.mean(all_acc_list)
+        mean_macro_precision = np.mean(all_macro_precision_list)
+        mean_macro_recall = np.mean(all_macro_recall_list)
+        mean_macro_f1 = np.mean(all_macro_f1_list)
+        mean_micro_precision = np.mean(all_micro_precision_list)
+        mean_micro_recall = np.mean(all_micro_recall_list)
+        mean_micro_f1 = np.mean(all_micro_f1_list)
+        # mean_auc = np.mean(all_auc_list)
+        logging.info(
+            '5-fold cross validation DDI Mean Evaluation: Macro Precision {:.4f} Macro Recall {:.4f} Macro F1 {:.4f} Micro Precision {:.4f} Micro Recall {:.4f} Micro F1 {:.4f} ACC {:.4f}'.format(
+                mean_macro_precision, mean_macro_recall, mean_macro_f1, mean_micro_precision, mean_micro_recall,
+                mean_micro_f1, mean_acc))
 
 
 if __name__ == '__main__':
