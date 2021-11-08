@@ -110,4 +110,4 @@ what you need to do according to your customized file:
 
 If you have any question, just contact us. 
 
-[Chinese version is provided here.](https://github.com/chenyujie1127/MUFFIN_publish) 
+Chinese version is provided [here.](https://github.com/chenyujie1127/MUFFIN_publish) 
