@@ -95,6 +95,17 @@ what you need to do according to your customized file:
 4. change “—out_dim” name with “1 or 81”, which is depends on your task “binary or multi-class”
 5. change “—multi_type” name with “False or True”, which is depends on your task “binary or multi-class”
 
+## Cite
+
+@article{chen2021muffin,
+  title={MUFFIN: multi-scale feature fusion for drug--drug interaction prediction},
+  author={Chen, Yujie and Ma, Tengfei and Yang, Xixi and Wang, Jianmin and Song, Bosheng and Zeng, Xiangxiang},
+  journal={Bioinformatics},
+  year={2021}
+}
+
 ## Contact
 
-If you have any question, just contact us.  
+If you have any question, just contact us. 
+
+[Chinese version is provided here.](https://github.com/chenyujie1127/MUFFIN_publish) 
