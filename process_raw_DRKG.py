@@ -65,7 +65,7 @@ def delete_drugbank_hetionet_ddi_from_drkg(infile, outfile):
         drug_1, relation, drug_2 = triples[i][0], triples[i][1], triples[i][2]
         result = re.match(r'DRUGBANK::', relation)
         result2 = re.match(r'Hetionet::', relation)
-        if (result or result2) and relation not in ['DRUGBANK::ddi-interactor-in::Compound:Compound',
+        if relation not in ['DRUGBANK::ddi-interactor-in::Compound:Compound',
                                                     'Hetionet::CrC::Compound:Compound']:
             l1 = "{}{}{}{}{}\n".format(drug_1, '\t', relation, '\t', drug_2)
             print(l1)
@@ -94,12 +94,12 @@ def generate_entity_relation_id_file(delimiter, smilesfile, file, file2, entity_
     train = []
 
     infile = open(smilesfile, 'r')
-    approved_drug_list = []
+    approved_drug_list = set()
     for line in infile:
         drug = line.replace('\n', '').replace('\r', '').split('\t')
-        # approved_drug_list.append('Compound::' + drug[0])
+        # approved_drug_list.add('Compound::' + drug[0])
         # drug_id = _get_id(entity_map, 'Compound::' + drug[0])
-        approved_drug_list.append(drug[0])
+        approved_drug_list.add(drug[0])
         drug_id = _get_id(entity_map, drug[0])
         print(drug, drug_id)
 
@@ -135,20 +135,33 @@ def generate_entity_relation_id_file(delimiter, smilesfile, file, file2, entity_
 
     ddi_name = []
     ddi = []
+    ddi_name_list = set()
     for i in range(len(triples2)):
         src, rel, dst = triples2[i][0], triples2[i][1], triples2[i][2]
         if rel in ['DRUGBANK::ddi-interactor-in::Compound:Compound', 'Hetionet::CrC::Compound:Compound']:
             # 存储有SMILES的DDI信息
             if src in approved_drug_list and dst in approved_drug_list:
                 ddi_pair_single = "{}{}{}\n".format(src, '\t', dst)
-                # ddi_pair_single_reverse = "{}{}{}\n".format(dst, '\t', src)
-                print(ddi_pair_single)
-                if ddi_pair_single not in ddi_name:
+                ddi_pair_single_reverse = "{}{}{}\n".format(dst, '\t', src)
+                # print(ddi_pair_single)
+                
+                if ddi_pair_single not in ddi_name_list:
+                    ddi_name_list.add(ddi_pair_single)
                     ddi_name.append(ddi_pair_single)
                     drug_id_1 = _get_id(entity_map, src)
                     drug_id_2 = _get_id(entity_map, dst)
                     ddi_id = "{}{}{}\n".format(drug_id_1, delimiter, drug_id_2)
                     ddi.append(ddi_id)
+                    
+                if ddi_pair_single_reverse not in ddi_name_list:
+                    ddi_name_list.add(ddi_pair_single_reverse)
+                    ddi_name.append(ddi_pair_single_reverse)
+                    drug_id_1 = _get_id(entity_map, src)
+                    drug_id_2 = _get_id(entity_map, dst)
+                    ddi_id_reverse = "{}{}{}\n".format(drug_id_2, delimiter, drug_id_1)
+                    ddi.append(ddi_id_reverse)
+                
+
 
     with open(ddi_name_file, "w+") as f:
         f.writelines(ddi_name)
