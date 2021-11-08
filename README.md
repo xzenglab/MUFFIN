@@ -97,7 +97,7 @@ what you need to do according to your customized file:
 
 ## Cite
 
-@article{chen2021muffin,
+> @article{chen2021muffin,
   title={MUFFIN: multi-scale feature fusion for drug--drug interaction prediction},
   author={Chen, Yujie and Ma, Tengfei and Yang, Xixi and Wang, Jianmin and Song, Bosheng and Zeng, Xiangxiang},
   journal={Bioinformatics},
